@@ -22,8 +22,10 @@ Add these environment variables in the Dokploy application settings:
 # Secret key (REQUIRED - generate with: openssl rand -base64 64)
 SIMPLEAUTH_SECRET=your-generated-base64-secret-here
 
-# Users (REQUIRED - format: user1:password1,user2:password2)
-SIMPLEAUTH_USERS=admin:yourSecurePassword123,user:anotherPass
+# Users (REQUIRED - format: user1:hash1,user2:hash2)
+# Generate hashes with: go run ./cmd/crypt username password
+# IMPORTANT: Hash contains $ symbols - see escaping notes below
+SIMPLEAUTH_USERS=admin:$5$rounds=535000$salt$hash,user:$5$rounds=535000$salt2$hash2
 
 # Server (optional - defaults shown)
 SIMPLEAUTH_LISTEN=:8080
@@ -33,12 +35,23 @@ SIMPLEAUTH_VERBOSE=true
 SIMPLEAUTH_LIFESPAN=168h
 ```
 
-### 3. Configure Port Mapping
+### 3. Important: Escaping Dollar Signs
+
+**CRITICAL:** SHA256 password hashes contain `$` symbols that **MUST** be escaped in Dokploy's environment variable UI.
+
+When entering `SIMPLEAUTH_USERS` in Dokploy:
+- Hashes look like: `$5$salt$hash`
+- **Escape each `$` as `$$`** in the UI
+- Example: `eli:$$5$$YqH7sB4YZa7KOuG$$R8TkMFI5wi9BffSHr.8anWVCKPRkEEKM2t6k.jji/v7`
+
+Without escaping, the `$` symbols will be interpreted as variable references and your hash will be corrupted, causing authentication to fail with "invalid salt format" errors.
+
+### 4. Configure Port Mapping
 
 - Container Port: `8080`
 - Host Port: Choose your desired port (e.g., `8080`)
 
-### 4. Deploy and Test
+### 5. Deploy and Test
 
 Click "Deploy" and test by visiting your deployment URL. Dokploy will automatically:
 - Pull the Docker image
@@ -49,7 +62,7 @@ Click "Deploy" and test by visiting your deployment URL. Dokploy will automatica
 | Variable | Default | Required? | Description | Example |
 |----------|---------|-----------|-------------|---------|
 | `SIMPLEAUTH_SECRET` | (none) | **Yes** | Base64-encoded secret key | Generate with `openssl rand -base64 64` |
-| `SIMPLEAUTH_USERS` | (none) | No* | Users (format: user:pass,...) | `admin:secret123,user:pass456` |
+| `SIMPLEAUTH_USERS` | (none) | No* | Users (format: user:hash,...) - hashes must be pre-generated | `admin:$5$salt$hash,user:$5$salt2$hash2` (see escaping notes) |
 | `SIMPLEAUTH_LISTEN` | `:8080` | No | Bind address | `:8080` or `0.0.0.0:8080` |
 | `SIMPLEAUTH_LIFESPAN` | `2400h` (100 days) | No | Token validity period | `24h`, `7d`, `168h` |
 | `SIMPLEAUTH_PASSWORD_FILE` | `/run/secrets/passwd` | No | Path to password file | `/etc/simpleauth/passwd` |
@@ -61,9 +74,15 @@ Click "Deploy" and test by visiting your deployment URL. Dokploy will automatica
 
 **Required Variables:** You must set `SIMPLEAUTH_SECRET` and either `SIMPLEAUTH_USERS` or `SIMPLEAUTH_PASSWORD_FILE` for the application to start.
 
-**Password Format:** Use plaintext passwords (e.g., `admin:password123,user:pass456`). Simpleauth automatically hashes them when loaded.
+**Hash Generation:** Use the crypt tool to generate password hashes:
+```bash
+docker run --rm git.woozle.org/neale/simpleauth:latest /crypt username password
+# Or locally: go run ./cmd/crypt username password
+```
 
-**Hash Format Reference:** For troubleshooting, SHA256 password hashes look like: `admin:$5$rounds=535000$salt$hash`
+**Hash Format:** SHA256 password hashes look like: `$5$rounds=535000$salt$hash`
+
+**CRITICAL:** In Dokploy's environment variable UI, escape each `$` as `$$` to prevent variable expansion.
 
 ## Domain Scoping (Multi-site Authentication)
 
@@ -93,19 +112,24 @@ Docker health check is automatically configured (every 30s).
 
 ## Production Best Practices
 
-- **Strong passwords**: `admin:TrulyStrongPassword123!@,user:AnotherGoodPass456`
+- **Strong password hashes**: Generate with `/crypt` tool for SHA256 hashing
 - **Token lifespan**: 168h (7 days) for standard, 24h for high security, 4h for maximum
 - **Secret management**: Generate with `openssl rand -base64 64`, store in Dokploy env vars only
 - **Logging**: Set `SIMPLEAUTH_VERBOSE=true` for troubleshooting, `false` for production
 
 ## Troubleshooting
 
-### Can't Login
+### Can't Login / "invalid salt format" error
 
-1. Check health endpoint: `GET /health`
-2. Ensure `SIMPLEAUTH_USERS` is set correctly in Dokploy environment variables
-3. Verify format: `username:password,user2:password2` (spaces are trimmed automatically)
-4. Check that passwords contain only allowed characters
+**Most common cause:** Dollar signs (`$`) in password hashes not escaped properly in Dokploy's environment UI.
+
+1. **Check dollar sign escaping**: Ensure each `$` in the hash is escaped as `$$` in Dokploy's UI
+   - Wrong: `eli:$5$salt$hash`
+   - Correct: `eli:$$5$$salt$$hash`
+2. Check health endpoint: `GET /health` to verify users are loaded
+3. Ensure `SIMPLEAUTH_USERS` format: `username:hash,user2:hash2` (spaces are trimmed automatically)
+4. Verify hashes were generated with `/crypt` tool
+5. Enable verbose logging (`SIMPLEAUTH_VERBOSE=true`) and check logs for specific errors
 
 ### Secret Configuration Issues
 
@@ -122,8 +146,10 @@ Check the health endpoint response:
 
 ### Common Issues
 
+- **Dollar sign escaping**: Most common issue - see "Can't Login" section above
 - **Variable typos**: Ensure `SIMPLEAUTH_USERS` and `SIMPLEAUTH_SECRET` are spelled exactly
-- **Format errors**: Users format is `user:pass,user2:pass2` (spaces are trimmed automatically)
+- **Format errors**: Users format is `user:hash,user2:hash2` (spaces are trimmed automatically)
 - **Restart required**: After changing environment variables, restart the application
+- **Hash corruption**: If authentication fails, check server logs for "invalid salt format" - indicates unescaped `$` symbols
 
-**Migration from password files:** Simply replace hash entries with plaintext passwords in `SIMPLEAUTH_USERS`. No conversion needed - just use the actual passwords.
+**Migration note:** Both `SIMPLEAUTH_USERS` and password files now use pre-hashed passwords. Use the same hash format for both. No conversion needed when switching between them.

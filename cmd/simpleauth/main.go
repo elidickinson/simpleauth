@@ -140,9 +140,18 @@ func debugf(fmt string, v ...any) {
 func authenticationValid(username, password string) bool {
 	c := crypt.SHA256.New()
 	if crypted, ok := cryptedPasswords[username]; ok {
+		debugf("verifying password for username:%v against hash:%v", username, crypted)
 		if err := c.Verify(crypted, []byte(password)); err == nil {
+			debugf("password verification succeeded for username:%v", username)
 			return true
+		} else {
+			debugf("password verification failed for username:%v error:%v", username, err)
+			if strings.Contains(err.Error(), "invalid salt") {
+				debugf("INVALID SALT FORMAT: This usually means dollar signs in hash were not escaped properly in environment variables")
+			}
 		}
+	} else {
+		debugf("no hash found for username:%v", username)
 	}
 	return false
 }
