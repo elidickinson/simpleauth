@@ -116,6 +116,7 @@ Dokploy makes deployment simple with environment variables:
    - `SIMPLEAUTH_SECRET`: Your base64-encoded 64-byte secret (generate with `openssl rand -base64 64`)
    - `SIMPLEAUTH_USERS`: Your users in format `user1:password1,user2:password2`
    - `SIMPLEAUTH_LISTEN`: `:8080` (or your preferred port)
+   - `SIMPLEAUTH_COOKIE_NAME`: Custom cookie name (optional, defaults to `__Http-simpleauth-token`)
 3. **Deploy the application** using the Docker image: `git.woozle.org/neale/simpleauth`
 
 **Example Dokploy environment setup:**
@@ -144,6 +145,12 @@ Simpleauth uses clear HTTP status codes to indicate authentication state:
 4. **Cookie expires** → Back to step 1
 
 The built-in login form automatically handles the cookie flow and provides user feedback on failed attempts.
+
+### Why We Use HTTP 418 for Login Success
+
+Simpleauth returns HTTP 418 for successful login. The code must not be 200 OK or any 2XX status - forward auth proxies would forward the request to the destination without returning the Set-Cookie header to the browser. This would create an infinite authentication loop since the cookie is never set.
+
+HTTP 418 won't be confused with other codes while still allowing the browser to receive the Set-Cookie header.
 
 ## Make your web server use it
 

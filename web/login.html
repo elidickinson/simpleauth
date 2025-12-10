@@ -50,7 +50,11 @@
           // 418 = authentication succeeded, cookie issued
           location.reload()
         } else {
-          error(resp.statusText || "Authentication failed")
+          if (resp.statusText) {
+            error(resp.statusText);
+          } else {
+            error(`Authentication failed (status code ${resp.status})`);
+          }
           // Clear password field on authentication failure
           document.querySelector("#password").value = ""
           // Focus password field so user can retry

@@ -20,9 +20,12 @@ import (
 	_ "github.com/GehirnInc/crypt/sha256_crypt"
 )
 
-const CookieName = "simpleauth-token"
+const DefaultCookieName = "__Http-simpleauth-token"
 
-var secret []byte
+var (
+	secret    []byte
+	cookieName string
+)
 
 // getEnvWithFallback returns environment value or fallback to default
 func getEnvWithFallback(key, defaultValue string) string {
@@ -168,7 +171,7 @@ func usernameIfAuthenticated(req *http.Request) string {
 
 	ncookies := 0
 	for i, cookie := range req.Cookies() {
-		if cookie.Name != CookieName {
+		if cookie.Name != cookieName {
 			continue
 		}
 		t, _ := token.ParseString(cookie.Value)
@@ -205,7 +208,7 @@ func rootHandler(w http.ResponseWriter, req *http.Request) {
 
 			// Build Set-Cookie header with standard attributes
 			cookieValue := fmt.Sprintf("%s=%s; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=%d",
-				CookieName, t.String(), int(lifespan.Seconds()))
+				cookieName, t.String(), int(lifespan.Seconds()))
 
 			// Add domain if Caddy specified one (via header_up)
 			if domain := req.Header.Get("X-Simpleauth-Domain"); domain != "" {
@@ -256,7 +259,8 @@ func rootHandler(w http.ResponseWriter, req *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("X-Simpleauth-Authentication", status)
-	w.Header().Set("WWW-Authenticate", "Simpleauth-Login")
+	// Prevent search engine indexing
+	w.Header().Set("X-Robots-Tag", "noindex")
 	// Prevent caching of authentication responses
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 
@@ -340,6 +344,9 @@ func main() {
 		"Print verbose logs, for debugging",
 	)
 	flag.Parse()
+
+	// Set cookie name from environment variable or use default
+	cookieName = getEnvWithFallback("SIMPLEAUTH_COOKIE_NAME", DefaultCookieName)
 
 	// Parse lifespan duration
 	var err error
