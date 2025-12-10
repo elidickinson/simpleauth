@@ -78,14 +78,8 @@ func loadPasswordsFromEnv() (map[string]string, error) {
 			continue
 		}
 		username := strings.TrimSpace(parts[0])
-		password := strings.TrimSpace(parts[1])
-
-		c := crypt.SHA256.New()
-		crypted, err := c.Generate([]byte(password), nil)
-		if err != nil {
-			return nil, err
-		}
-		passwords[username] = string(crypted)
+		hash := strings.TrimSpace(parts[1])
+		passwords[username] = hash
 	}
 	return passwords, nil
 }
