@@ -16,9 +16,18 @@
         align-items: center;
         min-height: 100vh;
         margin: 0;
+        padding: 0 1em;
       }
       div {
         margin: 1em;
+        width: 100%;
+        max-width: 320px;
+      }
+      input {
+        width: 100%;
+        padding: 0.75em;
+        font-size: 16px;
+        box-sizing: border-box;
       }
       #error {
         color: red;
@@ -32,8 +41,8 @@
       async function login(evt) {
         evt.preventDefault()
         let data = new FormData(evt.target)
-        let username = data.get("username")
-        let password = data.get("password")
+        let username = data.get("forward-auth-username")
+        let password = data.get("forward-auth-password")
 
         let headers = new Headers({
           "Authorization": "Basic " + btoa(username + ":" + password),
@@ -58,9 +67,9 @@
           }[resp.status] || "Authentication failed"
           error(`Error ${resp.status}: ${statusMsg}`)
           // Clear password field on authentication failure
-          document.querySelector("#password").value = ""
+          document.querySelector("#forward-auth-password").value = ""
           // Focus password field so user can retry
-          document.querySelector("#password").focus()
+          document.querySelector("#forward-auth-password").focus()
         }
       }
 
@@ -74,9 +83,9 @@
   <body>
     <h1>Login</h1>
     <form>
-      <div><label for="username">Username: </label><input type="text" id="username" name="username" autocomplete="username" required autofocus></div>
-      <div><label for="password">Password: </label><input type="password" id="password" name="password" autocomplete="current-password" required></div>
-      <div><input type="submit" value="Log In"></div>
+      <div><label for="forward-auth-username">Forward Auth Username: </label><input type="text" id="forward-auth-username" name="forward-auth-username" required autofocus></div>
+      <div><label for="forward-auth-password">Forward Auth Password: </label><input type="password" id="forward-auth-password" name="forward-auth-password" autocomplete="off" required></div>
+      <div><input type="submit" value="Authenticate"></div>
     </form>
     <div id="error"></div>
   </body>
