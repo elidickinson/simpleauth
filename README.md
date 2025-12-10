@@ -81,7 +81,6 @@ private.example.com {
   forward_auth localhost:8080 {
     uri /
     copy_headers X-Simpleauth-Username
-    header_down X-Simpleauth-Domain example.com    # Set cookie for all of example.com
   }
   respond "Hello, friend!"
 }
@@ -93,11 +92,25 @@ along in the HTTP request.
 If you are reverse proxying to some other app,
 it can look at this header to determine who's logged in.
 
-`header_down` sets the
-`X-Simpleauth-Domain` header in HTTP responses.
-The only time a client would get an HTTP response is when it is not yet authenticated.
-The built-in JavaScript login page uses this header to set the cookie domain:
-this way, you can protect multiple sites within a single cookie
+**Optional: Domain-scoped cookies**
+
+If you want the authentication cookie to work across multiple subdomains
+(e.g., both `app.example.com` and `api.example.com`), add the `header_up` directive:
+
+```
+private.example.com {
+  forward_auth localhost:8080 {
+    uri /
+    copy_headers X-Simpleauth-Username
+    header_up X-Simpleauth-Domain example.com    # Share cookie across all of example.com
+  }
+  respond "Hello, friend!"
+}
+```
+
+This tells simpleauth to set the cookie's domain attribute,
+allowing it to be shared across all subdomains of `example.com`.
+Without this, the cookie is scoped only to the specific hostname.
 
 ### Traefik
 

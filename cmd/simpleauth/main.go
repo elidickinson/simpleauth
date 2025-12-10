@@ -92,10 +92,19 @@ func rootHandler(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("X-Simpleauth-Username", username)
 
 		if login {
-			// Send back a token; this will turn into a cookie
+			// Send back a token as a Set-Cookie header
 			t := token.New(secret, username, time.Now().Add(lifespan))
-			w.Header().Set("X-Simpleauth-Cookie", fmt.Sprintf("%s=%s", CookieName, t.String()))
-			w.Header().Set("X-Simpleauth-Token", t.String())
+
+			// Build Set-Cookie header with standard attributes
+			cookieValue := fmt.Sprintf("%s=%s; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=%d",
+				CookieName, t.String(), int(lifespan.Seconds()))
+
+			// Add domain if Caddy specified one (via header_up)
+			if domain := req.Header.Get("X-Simpleauth-Domain"); domain != "" {
+				cookieValue += fmt.Sprintf("; Domain=%s", domain)
+			}
+
+			w.Header().Set("Set-Cookie", cookieValue)
 		} else {
 			// This is the only time simpleauth returns 200
 			// That will cause Caddy to proceed with the original request

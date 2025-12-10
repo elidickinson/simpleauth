@@ -31,35 +31,24 @@
         let username = data.get("username")
         let password = data.get("password")
 
-        url = new URL(evt.target.action)
-        url.username = ""
-        url.password = ""
-
         let headers = new Headers({
           "Authorization": "Basic " + btoa(username + ":" + password),
           "X-Simpleauth-Login": "true",
         })
-        let req = await fetch(url, {
+
+        let resp = await fetch(location.href, {
           method: "GET",
           headers: headers,
         })
-        let cookie = req.headers.get("X-Simpleauth-Cookie")
-        let domain = req.headers.get("X-Simpleauth-Domain")
-        if (cookie) {
-          let expiration = new Date()
-          expiration.setFullYear(expiration.getFullYear() + 1)
-          let cookieStr = `${cookie}; expires=${expiration.toUTCString()}; path=/; Secure; SameSite=Strict`
-          document.cookie = "simpleauth-token=; expires=Thu, 01 Jan 1970 00:00:00 GMT" // Clear any old cookies
-          if (domain) {
-            cookieStr += `; domain=${domain}`
-            document.cookie = `simpleauth-token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=${domain}`
-          }
-          document.cookie = cookieStr // JavaScript butt-magic!
+
+        if (resp.ok || resp.status === 401) {
+          // Browser automatically processes Set-Cookie header
+          // 401 with Set-Cookie is success (authentication succeeded, cookie issued)
           location.reload()
           message("Logged In!")
-          return
+        } else {
+          error(resp.statusText || "Authentication failed")
         }
-        error(req.statusText || "Authentication failed")
       }
 
       async function init() {
