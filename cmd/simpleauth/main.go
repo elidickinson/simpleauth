@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -20,7 +22,110 @@ import (
 
 const CookieName = "simpleauth-token"
 
-var secret []byte = make([]byte, 256)
+var secret []byte
+
+// getEnvWithFallback returns environment value or fallback to default
+func getEnvWithFallback(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// getSecret loads secret from environment variable or file
+func getSecret(secretPath string) ([]byte, error) {
+	// Try environment variable first
+	if secretEnv := os.Getenv("SIMPLEAUTH_SECRET"); secretEnv != "" {
+		decodedSecret, err := base64.StdEncoding.DecodeString(secretEnv)
+		if err != nil {
+			return nil, fmt.Errorf("invalid SIMPLEAUTH_SECRET: %w", err)
+		}
+		if len(decodedSecret) < 64 {
+			return nil, fmt.Errorf("SIMPLEAUTH_SECRET must be at least 64 bytes (got %d)", len(decodedSecret))
+		}
+		return decodedSecret[:64], nil
+	}
+
+	// Try to read from file
+	if _, err := os.Stat(secretPath); err != nil {
+		return nil, fmt.Errorf("secret not configured (no SIMPLEAUTH_SECRET env var and no file at %s): %w", secretPath, err)
+	}
+
+	content, err := ioutil.ReadFile(secretPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(content) < 64 {
+		return nil, fmt.Errorf("secret file at %s must be at least 64 bytes (got %d)", secretPath, len(content))
+	}
+	return content[:64], nil
+}
+
+// loadPasswordsFromEnv loads passwords from SIMPLEAUTH_USERS env var
+// Format: SIMPLEAUTH_USERS="user1:password1,user2:password2"
+func loadPasswordsFromEnv() (map[string]string, error) {
+	passwords := make(map[string]string)
+	users := os.Getenv("SIMPLEAUTH_USERS")
+	if users == "" {
+		return passwords, nil
+	}
+
+	pairs := strings.Split(users, ",")
+	for _, pair := range pairs {
+		parts := strings.SplitN(pair, ":", 2)
+		if len(parts) != 2 {
+			log.Printf("Warning: invalid user format '%s', expected 'username:password'", pair)
+			continue
+		}
+		username := strings.TrimSpace(parts[0])
+		password := strings.TrimSpace(parts[1])
+
+		c := crypt.SHA256.New()
+		crypted, err := c.Generate([]byte(password), nil)
+		if err != nil {
+			return nil, err
+		}
+		passwords[username] = string(crypted)
+	}
+	return passwords, nil
+}
+
+// getPasswords loads passwords from file or environment variable
+func getPasswords(passwordPath string, usersEnv string) (map[string]string, error) {
+	// If environment variable is set, use it
+	if usersEnv != "" {
+		passwords, err := loadPasswordsFromEnv()
+		if err != nil {
+			return nil, err
+		}
+		return passwords, nil
+	}
+
+	// Otherwise use password file
+	if _, err := os.Stat(passwordPath); err != nil {
+		return nil, err
+	}
+
+	f, err := os.Open(passwordPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	passwords := make(map[string]string)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Split(line, ":")
+		if len(parts) >= 2 {
+			username := parts[0]
+			hash := parts[1]
+			passwords[username] = hash
+		}
+	}
+	return passwords, scanner.Err()
+}
+var startTime = time.Now()
 var lifespan time.Duration
 var cryptedPasswords map[string]string
 var loginHtml []byte
@@ -147,80 +252,117 @@ func rootHandler(w http.ResponseWriter, req *http.Request) {
 	w.Write(loginHtml)
 }
 
+// healthHandler returns health status for monitoring
+func healthHandler(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	// Check if we have users and secret configured
+	status := map[string]interface{}{
+		"status": "healthy",
+		"users":  len(cryptedPasswords),
+		"secret_set": len(secret) >= 64,
+		"uptime": time.Since(startTime).String(), // Actual uptime
+	}
+
+	// If no users configured, mark as unhealthy
+	if len(cryptedPasswords) == 0 {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		status["status"] = "unhealthy"
+		status["error"] = "no users configured"
+	}
+
+	// If secret not configured, mark as unhealthy
+	if len(secret) < 64 {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		status["status"] = "unhealthy"
+		status["error"] = "secret not properly configured"
+	}
+
+	json.NewEncoder(w).Encode(status)
+}
+
 func main() {
+	// Support both flags and environment variables
 	listen := flag.String(
 		"listen",
-		":8080",
+		getEnvWithFallback("SIMPLEAUTH_LISTEN", ":8080"),
 		"Bind address for incoming HTTP connections",
 	)
-	flag.DurationVar(
-		&lifespan,
+	lifespanStr := flag.String(
 		"lifespan",
-		100*24*time.Hour,
-		"How long an issued token is valid",
+		getEnvWithFallback("SIMPLEAUTH_LIFESPAN", "2400h"),
+		"How long an issued token is valid (e.g., 100h, 30d)",
 	)
 	passwordPath := flag.String(
 		"passwd",
-		"/run/secrets/passwd",
+		getEnvWithFallback("SIMPLEAUTH_PASSWORD_FILE", "/run/secrets/passwd"),
 		"Path to a file containing passwords",
 	)
 	secretPath := flag.String(
 		"secret",
-		"/run/secrets/simpleauth.key",
+		getEnvWithFallback("SIMPLEAUTH_SECRET_FILE", "/run/secrets/simpleauth.key"),
 		"Path to a file containing some sort of secret, for signing requests",
 	)
 	htmlPath := flag.String(
 		"html",
-		"web",
+		getEnvWithFallback("SIMPLEAUTH_HTML_PATH", "web"),
 		"Path to HTML files",
 	)
 	flag.BoolVar(
 		&verbose,
 		"verbose",
-		false,
+		os.Getenv("SIMPLEAUTH_VERBOSE") == "true",
 		"Print verbose logs, for debugging",
 	)
 	flag.Parse()
 
-	cryptedPasswords = make(map[string]string, 10)
-	if f, err := os.Open(*passwordPath); err != nil {
-		log.Fatal(err)
-	} else {
-		defer f.Close()
-		scanner := bufio.NewScanner(f)
-		for scanner.Scan() {
-			line := scanner.Text()
-			parts := strings.Split(line, ":")
-			if len(parts) >= 2 {
-				username := parts[0]
-				password := parts[1]
-				cryptedPasswords[username] = password
-			}
-		}
+	// Parse lifespan duration
+	var err error
+	lifespan, err = time.ParseDuration(*lifespanStr)
+	if err != nil {
+		log.Fatalf("Invalid lifespan duration: %v", err)
 	}
 
-	var err error
+	// Load passwords from file or environment
+	usersEnv := os.Getenv("SIMPLEAUTH_USERS")
+	cryptedPasswords, err = getPasswords(*passwordPath, usersEnv)
+	if err != nil {
+		log.Fatal(err)
+	}
 
+	// Load HTML
 	loginHtml, err = ioutil.ReadFile(path.Join(*htmlPath, "login.html"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Read in secret
-	f, err := os.Open(*secretPath)
+	// Load secret from environment variable or file
+	secret, err = getSecret(*secretPath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer f.Close()
-	l, err := f.Read(secret)
-	if l < 64 {
-		log.Fatalf("Secret file provided %d bytes. That's not enough bytes!", l)
-	} else if err != nil {
-		log.Fatal(err)
+
+	if verbose {
+		log.Printf("Loaded %d users", len(cryptedPasswords))
+		if usersEnv != "" {
+			log.Println("Using environment variable for users")
+		} else {
+			log.Printf("Using password file: %s", *passwordPath)
+		}
+		if os.Getenv("SIMPLEAUTH_SECRET") != "" {
+			log.Println("Using SIMPLEAUTH_SECRET environment variable")
+		} else {
+			log.Printf("Using secret file: %s", *secretPath)
+		}
 	}
-	secret = secret[:l]
 
 	http.HandleFunc("/", rootHandler)
+	http.HandleFunc("/health", healthHandler)
 
 	fmt.Println("listening on", *listen)
 	log.Fatal(http.ListenAndServe(*listen, nil))

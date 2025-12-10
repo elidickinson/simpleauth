@@ -30,6 +30,8 @@ Simpleauth needs two (2) files:
 
 ## Create secret key
 
+**Option 1: File-based (recommended for local deployments)**
+
 This will use `/dev/urandom` to generate a 64-byte secret key.
 
 ```sh
@@ -37,8 +39,21 @@ SASECRET=/run/secrets/simpleauth.key  # Set to wherever you want your secret to 
 dd if=/dev/urandom of=$SASECRET bs=1 count=64
 ```
 
+**Option 2: Environment variable (ideal for container platforms like Dokploy)**
+
+Generate a base64-encoded secret:
+
+```sh
+# Generate once and copy to your platform's secret management
+openssl rand -base64 64
+```
+
+This will output a base64 string like `exampleBase64SecretHere...` that you can set as the `SIMPLEAUTH_SECRET` environment variable.
+
 
 ## Create password file
+
+**Option 1: File-based**
 
 It's just a text file with hashed passwords.
 Each line is of the format `username:password_hash`
@@ -52,12 +67,20 @@ sacrypt user2 password2 >> $SAPASSWD
 sacrypt user3 password3 >> $SAPASSWD
 ```
 
+**Option 2: Environment variable (ideal for container platforms)**
+
+Set the `SIMPLEAUTH_USERS` environment variable with format `user1:password1,user2:password2`:
+
+```bash
+SIMPLEAUTH_USERS="admin:secretpassword,user1:anotherpassword"
+```
+
+The passwords will be automatically hashed when loaded.
+
 
 ## Start it
 
-Turning this into the container orchestration system you prefer
-(Docker Swarm, Kubernetes, Docker Compose)
-is left as an exercise for the reader.
+**Option 1: Docker with files**
 
 ```sh
 docker run \
@@ -69,6 +92,40 @@ docker run \
   --volume $SAPASSWD:/run/secrets/passwd:ro \
   git.woozle.org/neale/simpleauth
 ```
+
+**Option 2: Environment variables (great for Dokploy)**
+
+```sh
+docker run \
+  --name=simpleauth \
+  --detach \
+  --restart=always \
+  --port 8080:8080 \
+  -e SIMPLEAUTH_SECRET="your-base64-secret-here" \
+  -e SIMPLEAUTH_USERS="admin:password1,user2:password2" \
+  -e SIMPLEAUTH_LISTEN=":8080" \
+  git.woozle.org/neale/simpleauth
+```
+
+## Dokploy Deployment
+
+Dokploy makes deployment simple with environment variables:
+
+1. **Create a new application** in Dokploy
+2. **Set these environment variables:**
+   - `SIMPLEAUTH_SECRET`: Your base64-encoded 64-byte secret (generate with `openssl rand -base64 64`)
+   - `SIMPLEAUTH_USERS`: Your users in format `user1:password1,user2:password2`
+   - `SIMPLEAUTH_LISTEN`: `:8080` (or your preferred port)
+3. **Deploy the application** using the Docker image: `git.woozle.org/neale/simpleauth`
+
+**Example Dokploy environment setup:**
+```
+SIMPLEAUTH_SECRET = SGVsbG9Xb3JsZEhlbGxvV29ybGQxMjM0NTY3ODkwYWJjZGVmZ2hpams=...
+SIMPLEAUTH_USERS = admin:securePassword123,developer:devPass456
+SIMPLEAUTH_LISTEN = :8080
+```
+
+The health endpoint is available at `/health` for monitoring your deployment status.
 
 ## Make your web server use it
 

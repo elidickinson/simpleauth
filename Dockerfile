@@ -3,7 +3,6 @@ WORKDIR /src
 COPY go.* ./
 COPY pkg ./pkg/
 COPY cmd ./cmd/
-RUN find
 RUN go get ./...
 RUN CGO_ENABLED=0 GOOS=linux go install ./...
 

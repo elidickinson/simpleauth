@@ -1,0 +1,77 @@
+# Example Docker Compose configuration for Simpleauth
+# This file demonstrates various deployment options for Dokploy/other platforms
+
+version: '3.8'
+
+services:
+  # Basic deployment with environment variables
+  simpleauth-basic:
+    image: simpleauth:latest
+    container_name: simpleauth-basic
+    ports:
+      - "8080:8080"
+    environment:
+      # Server configuration
+      - SIMPLEAUTH_LISTEN=:8080
+      - SIMPLEAUTH_VERBOSE=true
+
+      # User configuration (preferred for dokploy)
+      - SIMPLEAUTH_USERS=admin:secretpassword123,user:testpass,user2:anotherpass
+
+      # Token lifespan (e.g., 168h = 7 days)
+      - SIMPLEAUTH_LIFESPAN=168h
+
+      # File paths (with defaults)
+      - SIMPLEAUTH_SECRET_FILE=/data/simpleauth.key
+      - SIMPLEAUTH_HTML_PATH=/web
+    volumes:
+      # Persist secret key between restarts
+      - simpleauth_data:/data
+    restart: unless-stopped
+
+  # Advanced deployment with custom password file
+  simpleauth-advanced:
+    image: simpleauth:latest
+    container_name: simpleauth-advanced
+    ports:
+      - "8081:8080"
+    environment:
+      - SIMPLEAUTH_LISTEN=:8080
+      - SIMPLEAUTH_VERBOSE=true
+      - SIMPLEAUTH_LIFESPAN=720h  # 30 days
+      - SIMPLEAUTH_SECRET_FILE=/run/secrets/simpleauth.key
+      - SIMPLEAUTH_PASSWORD_FILE=/run/secrets/passwd
+    volumes:
+      # Mount password and secret files
+      - ./passwd:/run/secrets/passwd:ro
+      - ./simpleauth.key:/run/secrets/simpleauth.key:ro
+    restart: unless-stopped
+    profiles:
+      - advanced
+
+  # Production deployment with domain scoping
+  simpleauth-prod:
+    image: simpleauth:latest
+    container_name: simpleauth-prod
+    ports:
+      - "8082:8080"
+    environment:
+      - SIMPLEAUTH_LISTEN=:8080
+      - SIMPLEAUTH_USERS=produser:${PROD_PASSWORD}
+      - SIMPLEAUTH_LIFESPAN=168h
+      - SIMPLEAUTH_SECRET_FILE=/data/simpleauth.key
+    volumes:
+      - simpleauth_prod_data:/data
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  simpleauth_data:
+  simpleauth_prod_data:
+
+# Network configuration
+networks:
+  default:
+    name: simpleauth-network
+    driver: bridge
