@@ -141,7 +141,7 @@ func debugf(fmt string, v ...any) {
 func authenticationValid(username, password string) bool {
 	c := crypt.SHA256.New()
 	if crypted, ok := cryptedPasswords[username]; ok {
-		debugf("verifying password for username:%v against hash:%v", username, crypted)
+		debugf("verifying password for username:%v", username)
 		if err := c.Verify(crypted, []byte(password)); err == nil {
 			debugf("password verification succeeded for username:%v", username)
 			return true
@@ -164,8 +164,6 @@ func usernameIfAuthenticated(req *http.Request) string {
 		if valid {
 			return authUsername
 		}
-	} else {
-		debugf("no basic auth")
 	}
 
 	ncookies := 0
@@ -192,12 +190,13 @@ func rootHandler(w http.ResponseWriter, req *http.Request) {
 	var status string
 	username := usernameIfAuthenticated(req)
 	login := req.Header.Get("X-Simpleauth-Login") == "true"
-	browser := strings.Contains(req.Header.Get("Accept"), "text/html")
 
 	if username == "" {
 		status = "failed"
+		debugf("authentication failed")
 	} else {
 		status = "succeeded"
+		debugf("authentication succeeded for username:%v", username)
 		w.Header().Set("X-Simpleauth-Username", username)
 
 		if login {
@@ -217,6 +216,7 @@ func rootHandler(w http.ResponseWriter, req *http.Request) {
 		} else {
 			// This is the only time simpleauth returns 200
 			// That will cause Caddy to proceed with the original request
+			w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 			http.Error(w, "Success", http.StatusOK)
 			return
 		}
@@ -225,10 +225,19 @@ func rootHandler(w http.ResponseWriter, req *http.Request) {
 		// which needs these headers to set the cookie and try again.
 	}
 
+	// Extract client IP for logging
 	clientIP := req.Header.Get("X-Real-IP")
 	if clientIP == "" {
 		clientIP = req.RemoteAddr
 	}
+	forwardedFor := req.Header.Get("X-Forwarded-For")
+
+	// Log authentication attempt in verbose mode
+	if verbose {
+		debugf("auth attempt - client:%v forwarded:%v method:%s path:%s login:%v status:%s",
+			clientIP, forwardedFor, req.Method, req.URL.Path, login, status)
+	}
+
 	forwardedMethod := req.Header.Get("X-Forwarded-Method")
 	forwardedURL := url.URL{
 		Scheme: req.Header.Get("X-Forwarded-Proto"),
@@ -248,10 +257,8 @@ func rootHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("X-Simpleauth-Authentication", status)
 	w.Header().Set("WWW-Authenticate", "Simpleauth-Login")
-	if !login && !browser {
-		// Make browsers use our login form instead of basic auth
-		w.Header().Add("WWW-Authenticate", "Basic realm=\"simpleauth\"")
-	}
+	// Prevent caching of authentication responses
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 
 	// Return appropriate status code
 	if username != "" && login {
