@@ -50,11 +50,13 @@
           // 418 = authentication succeeded, cookie issued
           location.reload()
         } else {
-          if (resp.statusText) {
-            error(resp.statusText);
-          } else {
-            error(`Authentication failed (status code ${resp.status})`);
-          }
+          let statusMsg = resp.statusText || {
+            401: "Not Authorized",
+            429: "Rate Limited - please wait to try again",
+            500: "Server Error",
+            502: "Server Error"
+          }[resp.status] || "Authentication failed"
+          error(`Error ${resp.status}: ${statusMsg}`)
           // Clear password field on authentication failure
           document.querySelector("#password").value = ""
           // Focus password field so user can retry
