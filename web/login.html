@@ -1,14 +1,21 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Login</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
       html {
         font-family: sans-serif;
         color: white;
-        background: seagreen linear-gradient(315deg, rgba(255,255,255,0.2), transparent); 
+        background: seagreen linear-gradient(315deg, rgba(255,255,255,0.2), transparent);
         height: 100%;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
       }
       div {
         margin: 1em;
@@ -20,9 +27,6 @@
     <script>
       function error(msg) {
         document.querySelector("#error").textContent = msg
-      }
-      function message(msg) {
-        document.querySelector("#message").textContent = msg
       }
 
       async function login(evt) {
@@ -41,13 +45,16 @@
           headers: headers,
         })
 
-        if (resp.ok || resp.status === 401) {
+        if (resp.status === 418) {
           // Browser automatically processes Set-Cookie header
-          // 401 with Set-Cookie is success (authentication succeeded, cookie issued)
+          // 418 = authentication succeeded, cookie issued
           location.reload()
-          message("Logged In!")
         } else {
           error(resp.statusText || "Authentication failed")
+          // Clear password field on authentication failure
+          document.querySelector("#password").value = ""
+          // Focus password field so user can retry
+          document.querySelector("#password").focus()
         }
       }
 
@@ -61,11 +68,10 @@
   <body>
     <h1>Login</h1>
     <form>
-      <div>Username: <input type="text" autocomplete="username" name="username"></div>
-      <div>Password: <input type="password" autocomplete="current-password" name="password"></div>
+      <div><label for="username">Username: </label><input type="text" id="username" name="username" autocomplete="username" required autofocus></div>
+      <div><label for="password">Password: </label><input type="password" id="password" name="password" autocomplete="current-password" required></div>
       <div><input type="submit" value="Log In"></div>
     </form>
     <div id="error"></div>
-    <div id="message"></div>
   </body>
 </html>

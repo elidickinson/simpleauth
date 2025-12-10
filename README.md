@@ -6,7 +6,7 @@ I tested it with Caddy, but it should work fine with Traefik.
 # Theory of Operation
 
 This issues cryptographically signed authentication tokens to the client.
-Some JavaScript stores the token in a cookie.
+JavaScript stores the token in an HTTP-only cookie.
 
 When a client presents an authentication token in a cookie,
 they are allowed in if the token was properly signed,
@@ -18,7 +18,7 @@ Authentication tokens consist of:
 * Expiration date
 * Hashed Message Authentication Code (HMAC)
 
-Simpleauth also works with HTTP Basic authentication.
+Simpleauth also works with HTTP Basic authentication and provides a built-in login form.
 
 # Setup
 
@@ -126,6 +126,24 @@ SIMPLEAUTH_LISTEN = :8080
 ```
 
 The health endpoint is available at `/health` for monitoring your deployment status.
+
+## Authentication Flow
+
+Simpleauth uses clear HTTP status codes to indicate authentication state:
+
+| Status Code | Authentication State | What Happens |
+|-------------|----------------------|--------------|
+| **200** | Valid token or basic auth | Forward proxy continues to destination |
+| **418** | Login form success | Browser receives Set-Cookie, reloads page |
+| **401** | Authentication failed | Shows login form or returns error |
+
+**Flow:**
+1. **First request** → No cookie → 401 + login form
+2. **Login submit** → Form POST → 418 + Set-Cookie if credentials valid
+3. **Browser reload** → Has cookie → 200 → Access granted
+4. **Cookie expires** → Back to step 1
+
+The built-in login form automatically handles the cookie flow and provides user feedback on failed attempts.
 
 ## Make your web server use it
 

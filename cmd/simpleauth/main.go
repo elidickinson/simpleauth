@@ -119,6 +119,7 @@ func getPasswords(passwordPath string, usersEnv string) (map[string]string, erro
 	}
 	return passwords, scanner.Err()
 }
+
 var startTime = time.Now()
 var lifespan time.Duration
 var cryptedPasswords map[string]string
@@ -147,7 +148,7 @@ func authenticationValid(username, password string) bool {
 		} else {
 			debugf("password verification failed for username:%v error:%v", username, err)
 			if strings.Contains(err.Error(), "invalid salt") {
-				debugf("INVALID SALT FORMAT: This usually means dollar signs in hash were not escaped properly in environment variables")
+				debugf("INVALID SALT FORMAT: This usually means dollar signs in hash were not wrapped in single quotes in the environment variable")
 			}
 		}
 	} else {
@@ -251,7 +252,16 @@ func rootHandler(w http.ResponseWriter, req *http.Request) {
 		// Make browsers use our login form instead of basic auth
 		w.Header().Add("WWW-Authenticate", "Basic realm=\"simpleauth\"")
 	}
-	w.WriteHeader(http.StatusUnauthorized)
+
+	// Return appropriate status code
+	if username != "" && login {
+		// Authentication succeeded in login mode - return 418 with Set-Cookie
+		w.WriteHeader(http.StatusTeapot)
+	} else {
+		// Authentication failed - return 401
+		w.WriteHeader(http.StatusUnauthorized)
+	}
+
 	w.Write(loginHtml)
 }
 
@@ -266,10 +276,10 @@ func healthHandler(w http.ResponseWriter, req *http.Request) {
 
 	// Check if we have users and secret configured
 	status := map[string]interface{}{
-		"status": "healthy",
-		"users":  len(cryptedPasswords),
+		"status":     "healthy",
+		"users":      len(cryptedPasswords),
 		"secret_set": len(secret) >= 64,
-		"uptime": time.Since(startTime).String(), // Actual uptime
+		"uptime":     time.Since(startTime).String(), // Actual uptime
 	}
 
 	// If no users configured, mark as unhealthy

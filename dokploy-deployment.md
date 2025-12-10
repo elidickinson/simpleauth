@@ -41,10 +41,10 @@ SIMPLEAUTH_LIFESPAN=168h
 
 When entering `SIMPLEAUTH_USERS` in Dokploy:
 - Hashes look like: `$5$salt$hash`
-- **Escape each `$` as `$$`** in the UI
-- Example: `eli:$$5$$YqH7sB4YZa7KOuG$$R8TkMFI5wi9BffSHr.8anWVCKPRkEEKM2t6k.jji/v7`
+- **Wrap the entire value in single quotes** to prevent variable expansion
+- Example: `'eli:$5$YqH7sB4YZa7KOuG/$R8TkMFI5wi9BffSHr.8anWVCKPRkEEKM2t6k.jji/v7'`
 
-Without escaping, the `$` symbols will be interpreted as variable references and your hash will be corrupted, causing authentication to fail with "invalid salt format" errors.
+Without single quotes, the `$` symbols will be interpreted as variable references and your hash will be corrupted, causing authentication to fail with "invalid salt format" errors.
 
 ### 4. Configure Port Mapping
 
@@ -82,7 +82,7 @@ docker run --rm git.woozle.org/neale/simpleauth:latest /crypt username password
 
 **Hash Format:** SHA256 password hashes look like: `$5$rounds=535000$salt$hash`
 
-**CRITICAL:** In Dokploy's environment variable UI, escape each `$` as `$$` to prevent variable expansion.
+**CRITICAL:** In Dokploy's environment variable UI, wrap the entire value in single quotes to prevent `$` expansion.
 
 ## Domain Scoping (Multi-site Authentication)
 
@@ -123,9 +123,9 @@ Docker health check is automatically configured (every 30s).
 
 **Most common cause:** Dollar signs (`$`) in password hashes not escaped properly in Dokploy's environment UI.
 
-1. **Check dollar sign escaping**: Ensure each `$` in the hash is escaped as `$$` in Dokploy's UI
-   - Wrong: `eli:$5$salt$hash`
-   - Correct: `eli:$$5$$salt$$hash`
+1. **Check dollar sign escaping**: Ensure the entire hash value is wrapped in single quotes in Dokploy's UI
+   - Wrong: `eli:$5$salt$hash` (unquoted - dollar signs get expanded)
+   - Correct: `'eli:$5$salt$hash'` (single quotes prevent expansion)
 2. Check health endpoint: `GET /health` to verify users are loaded
 3. Ensure `SIMPLEAUTH_USERS` format: `username:hash,user2:hash2` (spaces are trimmed automatically)
 4. Verify hashes were generated with `/crypt` tool
@@ -150,6 +150,6 @@ Check the health endpoint response:
 - **Variable typos**: Ensure `SIMPLEAUTH_USERS` and `SIMPLEAUTH_SECRET` are spelled exactly
 - **Format errors**: Users format is `user:hash,user2:hash2` (spaces are trimmed automatically)
 - **Restart required**: After changing environment variables, restart the application
-- **Hash corruption**: If authentication fails, check server logs for "invalid salt format" - indicates unescaped `$` symbols
+- **Hash corruption**: If authentication fails, check server logs for "invalid salt format" - indicates dollar signs weren't properly wrapped in single quotes
 
 **Migration note:** Both `SIMPLEAUTH_USERS` and password files now use pre-hashed passwords. Use the same hash format for both. No conversion needed when switching between them.
