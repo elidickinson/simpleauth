@@ -2,6 +2,8 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
     <style>
       html {
         font-family: sans-serif;
@@ -29,8 +31,19 @@
         font-size: 16px;
         box-sizing: border-box;
       }
+      input:focus {
+        outline: 2px solid white;
+      }
+      input[type="submit"] {
+        cursor: pointer;
+      }
+      input[type="submit"]:focus,
+      input[type="submit"]:hover {
+        background-color: rgba(255,255,255,0.2);
+      }
       #error {
         color: red;
+        margin-top: 1em;
       }
     </style>
     <script>

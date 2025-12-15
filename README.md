@@ -1,5 +1,15 @@
 # Simple Auth
 
+> **Fork Changes**
+>
+> This fork includes several improvements over the original:
+>
+> * **Environment Variable Support** - Configure via `SIMPLEAUTH_SECRET` and `SIMPLEAUTH_USERS` for easier container deployment
+> * **Container Platform Ready** - Optimized for Dokploy and similar platforms with deployment documentation
+> * **Security Enhancements** - HttpOnly cookies via Set-Cookie header (prevents XSS token theft), cache controls, X-Robots-Tag
+> * **Better UX** - Mobile-responsive login form with clear error messages and status codes
+> * **Health Monitoring** - Built-in `/health` endpoint that checks configuration and returns proper status codes
+
 This is a stateless forward-auth provider.
 I tested it with Caddy, but it should work fine with Traefik.
 
@@ -19,6 +29,17 @@ Authentication tokens consist of:
 * Hashed Message Authentication Code (HMAC)
 
 Simpleauth also works with HTTP Basic authentication and provides a built-in login form.
+
+# Building the Image
+
+```sh
+# Clone the repository
+git clone https://github.com/your-username/simpleauth.git
+cd simpleauth
+
+# Build the Docker image
+docker build -t simpleauth .
+```
 
 # Setup
 
@@ -59,7 +80,7 @@ It's just a text file with hashed passwords.
 Each line is of the format `username:password_hash`
 
 ```sh
-alias sacrypt="docker run --rm --entrypoint=/crypt git.woozle.org/neale/simpleauth"
+alias sacrypt="docker run --rm --entrypoint=/crypt simpleauth"
 SAPASSWD=/run/secrets/passwd   # Set to wherever you want your password file to live
 : > $SAPASSWD                  # Reset password file
 sacrypt user1 password1 >> $SAPASSWD
@@ -90,7 +111,7 @@ docker run \
   --port 8080:8080 \
   --volume $SASECRET:/run/secrets/simpleauth.key:ro \
   --volume $SAPASSWD:/run/secrets/passwd:ro \
-  git.woozle.org/neale/simpleauth
+  simpleauth
 ```
 
 **Option 2: Environment variables (great for Dokploy)**
@@ -104,7 +125,7 @@ docker run \
   -e SIMPLEAUTH_SECRET="your-base64-secret-here" \
   -e SIMPLEAUTH_USERS="admin:password1,user2:password2" \
   -e SIMPLEAUTH_LISTEN=":8080" \
-  git.woozle.org/neale/simpleauth
+  simpleauth
 ```
 
 ## Dokploy Deployment
@@ -117,7 +138,7 @@ Dokploy makes deployment simple with environment variables:
    - `SIMPLEAUTH_USERS`: Your users in format `user1:password1,user2:password2`
    - `SIMPLEAUTH_LISTEN`: `:8080` (or your preferred port)
    - `SIMPLEAUTH_COOKIE_NAME`: Custom cookie name (optional, defaults to `__Http-simpleauth-token`)
-3. **Deploy the application** using the Docker image: `git.woozle.org/neale/simpleauth`
+3. **Deploy the application** using the Docker image: `simpleauth`
 
 **Example Dokploy environment setup:**
 ```
@@ -127,6 +148,24 @@ SIMPLEAUTH_LISTEN = :8080
 ```
 
 The health endpoint is available at `/health` for monitoring your deployment status.
+
+## Environment Variables
+
+Simpleauth supports these environment variables for configuration:
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `SIMPLEAUTH_SECRET` | (none) | **Yes** | Base64-encoded secret key (generate with `openssl rand -base64 64`) |
+| `SIMPLEAUTH_USERS` | (none) | No | Users in format `user1:hash1,user2:hash2` (hashes must be pre-generated) |
+| `SIMPLEAUTH_LISTEN` | `:8080` | No | Bind address for incoming connections |
+| `SIMPLEAUTH_LIFESPAN` | `2400h` | No | Token validity period (e.g., `24h`, `168h`, `7d`) |
+| `SIMPLEAUTH_COOKIE_NAME` | `__Http-simpleauth-token` | No | Custom authentication cookie name |
+| `SIMPLEAUTH_PASSWORD_FILE` | `/run/secrets/passwd` | No | Path to password file (alternative to `SIMPLEAUTH_USERS`) |
+| `SIMPLEAUTH_SECRET_FILE` | `/run/secrets/simpleauth.key` | No | Path to secret file (alternative to `SIMPLEAUTH_SECRET`) |
+| `SIMPLEAUTH_HTML_PATH` | `web` | No | Path to HTML template files |
+| `SIMPLEAUTH_VERBOSE` | `false` | No | Enable verbose logging for debugging |
+
+**Note:** You must set `SIMPLEAUTH_SECRET` and either `SIMPLEAUTH_USERS` or `SIMPLEAUTH_PASSWORD_FILE` for the application to start properly.
 
 ## Authentication Flow
 
@@ -194,6 +233,27 @@ This tells simpleauth to set the cookie's domain attribute,
 allowing it to be shared across all subdomains of `example.com`.
 Without this, the cookie is scoped only to the specific hostname.
 
+**Prevent cookie leakage to backends**
+
+When using `reverse_proxy` to forward requests to your backend application,
+you should filter out the simpleauth cookie to prevent it from being sent to your backend:
+
+```
+private.example.com {
+  forward_auth localhost:8080 {
+    uri /
+    copy_headers X-Simpleauth-Username
+  }
+  
+  reverse_proxy backend:8080 {
+    header_up Host {upstream_hostport}
+    header_down request_header Cookie ([^|;]?)__Http-simpleauth-token=[^;]*(;|$) "$1"
+  }
+}
+```
+
+The `header_down` directive with the regex `([^|;]?)__Http-simpleauth-token=[^;]*(;|$)` removes the simpleauth authentication cookie from requests sent to your backend, preventing unnecessary cookie data from reaching your application.
+
 ### Traefik
 
 I need someone to send me equivalent
@@ -229,3 +289,4 @@ WebDAV client code to work with anything else I found.
 The canonical home for this project is
 https://git.woozle.org/neale/simpleauth
 
+**Note:** This is a fork with enhanced features. Use your own Docker registry/organization for deployment.

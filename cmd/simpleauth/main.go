@@ -80,7 +80,7 @@ func loadPasswordsFromEnv() (map[string]string, error) {
 			log.Printf("Warning: invalid user format '%s', expected 'username:password'", pair)
 			continue
 		}
-		username := strings.TrimSpace(parts[0])
+		username := strings.ToLower(strings.TrimSpace(parts[0]))
 		hash := strings.TrimSpace(parts[1])
 		passwords[username] = hash
 	}
@@ -115,7 +115,7 @@ func getPasswords(passwordPath string, usersEnv string) (map[string]string, erro
 		line := scanner.Text()
 		parts := strings.Split(line, ":")
 		if len(parts) >= 2 {
-			username := parts[0]
+			username := strings.ToLower(parts[0])
 			hash := parts[1]
 			passwords[username] = hash
 		}
@@ -162,6 +162,7 @@ func authenticationValid(username, password string) bool {
 
 func usernameIfAuthenticated(req *http.Request) string {
 	if authUsername, authPassword, ok := req.BasicAuth(); ok {
+		authUsername = strings.ToLower(authUsername)
 		valid := authenticationValid(authUsername, authPassword)
 		debugf("basic auth valid:%v username:%v", valid, authUsername)
 		if valid {

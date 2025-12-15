@@ -11,7 +11,7 @@ Deploy Simpleauth on Dokploy in minutes with environment variables:
 In Dokploy:
 - Click "Create Application"
 - Choose "Docker Image"
-- Image: `git.woozle.org/neale/simpleauth`
+- Image: `YOUR_FORK/simpleauth`
 - Tag: `latest`
 
 ### 2. Configure Environment Variables
@@ -76,7 +76,7 @@ Click "Deploy" and test by visiting your deployment URL. Dokploy will automatica
 
 **Hash Generation:** Use the crypt tool to generate password hashes:
 ```bash
-docker run --rm git.woozle.org/neale/simpleauth:latest /crypt username password
+docker run --rm YOUR_FORK/simpleauth:latest /crypt username password
 # Or locally: go run ./cmd/crypt username password
 ```
 
