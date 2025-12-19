@@ -238,7 +238,7 @@ func rootHandler(w http.ResponseWriter, req *http.Request) {
 
 	// Log authentication attempt in verbose mode
 	if verbose {
-		debugf("auth attempt - client:%v forwarded:%v method:%s path:%s login:%v status:%s",
+		debugf("auth attempt - client:%s forwarded:%s method:%s path:%s login:%v status:%s",
 			clientIP, forwardedFor, req.Method, req.URL.Path, login, status)
 	}
 
