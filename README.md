@@ -1,14 +1,14 @@
 # Simple Auth
 
-> **Fork Changes**
+> **Fork Improvements**
 >
-> This fork includes several improvements over the original:
+> This fork enhances the original with:
 >
-> * **Environment Variable Support** - Configure via `SIMPLEAUTH_SECRET` and `SIMPLEAUTH_USERS` for easier container deployment
-> * **Container Platform Ready** - Optimized for Dokploy and similar platforms with deployment documentation
-> * **Security Enhancements** - HttpOnly cookies via Set-Cookie header (prevents XSS token theft), cache controls, X-Robots-Tag
-> * **Better UX** - Mobile-responsive login form with clear error messages and status codes
-> * **Health Monitoring** - Built-in `/health` endpoint that checks configuration and returns proper status codes
+> * **Environment Variable Config** - Deploy via `SIMPLEAUTH_SECRET` and `SIMPLEAUTH_USERS` without file mounts
+> * **Container-First** - Native Dokploy support with comprehensive deployment docs
+> * **Hardened Security** - HttpOnly, Secure, and SameSite cookies; cache controls; anti-indexing headers
+> * **Better UX** - Mobile-responsive login with descriptive error messages and clear status codes
+> * **Health Endpoint** - `/health` endpoint reports configuration status for monitoring
 
 This is a stateless forward-auth provider.
 I tested it with Caddy, but it should work fine with Traefik.
@@ -78,9 +78,17 @@ This will output a base64 string like `exampleBase64SecretHere...` that you can 
 
 It's just a text file with hashed passwords.
 Each line is of the format `username:password_hash`
+Use the crypt utility to generate SHA256 hashes:
 
 ```sh
+# Method 1: Using Docker
 alias sacrypt="docker run --rm --entrypoint=/crypt simpleauth"
+
+# Method 2: Build locally
+go build -o crypt ./cmd/crypt
+alias sacrypt="./crypt"
+
+# Generate password file
 SAPASSWD=/run/secrets/passwd   # Set to wherever you want your password file to live
 : > $SAPASSWD                  # Reset password file
 sacrypt user1 password1 >> $SAPASSWD
@@ -93,10 +101,14 @@ sacrypt user3 password3 >> $SAPASSWD
 Set the `SIMPLEAUTH_USERS` environment variable with format `user1:password1,user2:password2`:
 
 ```bash
+# Plain text passwords (auto-hashed)
 SIMPLEAUTH_USERS="admin:secretpassword,user1:anotherpassword"
+
+# Or pre-generated hashes (more secure for container logs)
+SIMPLEAUTH_USERS='admin:$5$rounds=535000$salt$hash,user1:$5$rounds=535000$salt2$hash2'
 ```
 
-The passwords will be automatically hashed when loaded.
+The passwords will be automatically hashed when loaded if provided as plain text. For pre-generated hashes, use the crypt utility.
 
 
 ## Start it
@@ -156,7 +168,7 @@ Simpleauth supports these environment variables for configuration:
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | `SIMPLEAUTH_SECRET` | (none) | **Yes** | Base64-encoded secret key (generate with `openssl rand -base64 64`) |
-| `SIMPLEAUTH_USERS` | (none) | No | Users in format `user1:hash1,user2:hash2` (hashes must be pre-generated) |
+| `SIMPLEAUTH_USERS` | (none) | No | Users in format `user1:password1,user2:password2` (plain-text passwords, auto-hashed) |
 | `SIMPLEAUTH_LISTEN` | `:8080` | No | Bind address for incoming connections |
 | `SIMPLEAUTH_LIFESPAN` | `2400h` | No | Token validity period (e.g., `24h`, `168h`, `7d`) |
 | `SIMPLEAUTH_COOKIE_NAME` | `__Http-simpleauth-token` | No | Custom authentication cookie name |
@@ -166,6 +178,32 @@ Simpleauth supports these environment variables for configuration:
 | `SIMPLEAUTH_VERBOSE` | `false` | No | Enable verbose logging for debugging |
 
 **Note:** You must set `SIMPLEAUTH_SECRET` and either `SIMPLEAUTH_USERS` or `SIMPLEAUTH_PASSWORD_FILE` for the application to start properly.
+
+**Password Handling:** When using `SIMPLEAUTH_USERS`, passwords can be provided as plain text (they will be automatically hashed) or as pre-generated SHA256 hashes. To use pre-generated hashes, create them with: `go run ./cmd/crypt username password`
+
+### Command-line Flags
+
+Simpleauth also supports command-line flags as alternatives to environment variables:
+
+```bash
+simpleauth \
+  -listen :8080 \
+  -lifespan 168h \
+  -passwd /run/secrets/passwd \
+  -secret /run/secrets/simpleauth.key \
+  -html web \
+  -verbose
+```
+
+All flags have corresponding environment variables (see table above). Environment variables take precedence over flag defaults.
+
+### Security Headers
+
+Simpleauth automatically adds several security headers:
+- **X-Content-Type-Options: nosniff** - Prevents MIME-type sniffing
+- **X-Frame-Options: DENY** - Prevents clickjacking attacks
+- **X-Robots-Tag: noindex** - Prevents search engine indexing
+- **Cache-Control: no-store, no-cache, must-revalidate** - Prevents caching of auth responses
 
 ## Authentication Flow
 
