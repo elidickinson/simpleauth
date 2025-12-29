@@ -98,17 +98,20 @@ sacrypt user3 password3 >> $SAPASSWD
 
 **Option 2: Environment variable (ideal for container platforms)**
 
-Set the `SIMPLEAUTH_USERS` environment variable with format `user1:password1,user2:password2`:
+Set the `SIMPLEAUTH_USERS` environment variable with pre-generated hashes:
 
 ```bash
-# Plain text passwords (auto-hashed)
-SIMPLEAUTH_USERS="admin:secretpassword,user1:anotherpassword"
-
-# Or pre-generated hashes (more secure for container logs)
+# Generate hashes with: go run ./cmd/crypt username password
 SIMPLEAUTH_USERS='admin:$5$rounds=535000$salt$hash,user1:$5$rounds=535000$salt2$hash2'
 ```
 
-The passwords will be automatically hashed when loaded if provided as plain text. For pre-generated hashes, use the crypt utility.
+**Important:** Hashes contain `$` symbols that must be escaped in shell environments. Wrap the value in single quotes to prevent variable expansion.
+
+Note on escaping in Dokploy:
+```bash
+# In Dokploy environment variables UI
+SIMPLEAUTH_USERS='eli:$5$YqH7sB4YZa7KOuG/$R8TkMFI5wi9BffSHr.8anWVCKPRkEEKM2t6k.jji/v7'
+```
 
 
 ## Start it
@@ -168,7 +171,7 @@ Simpleauth supports these environment variables for configuration:
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | `SIMPLEAUTH_SECRET` | (none) | **Yes** | Base64-encoded secret key (generate with `openssl rand -base64 64`) |
-| `SIMPLEAUTH_USERS` | (none) | No | Users in format `user1:password1,user2:password2` (plain-text passwords, auto-hashed) |
+| `SIMPLEAUTH_USERS` | (none) | No | Users in format `user1:hash1,user2:hash2` (hashes must be pre-generated) |
 | `SIMPLEAUTH_LISTEN` | `:8080` | No | Bind address for incoming connections |
 | `SIMPLEAUTH_LIFESPAN` | `2400h` | No | Token validity period (e.g., `24h`, `168h`, `7d`) |
 | `SIMPLEAUTH_COOKIE_NAME` | `__Http-simpleauth-token` | No | Custom authentication cookie name |
@@ -179,7 +182,7 @@ Simpleauth supports these environment variables for configuration:
 
 **Note:** You must set `SIMPLEAUTH_SECRET` and either `SIMPLEAUTH_USERS` or `SIMPLEAUTH_PASSWORD_FILE` for the application to start properly.
 
-**Password Handling:** When using `SIMPLEAUTH_USERS`, passwords can be provided as plain text (they will be automatically hashed) or as pre-generated SHA256 hashes. To use pre-generated hashes, create them with: `go run ./cmd/crypt username password`
+**Password Handling:** `SIMPLEAUTH_USERS` requires pre-generated SHA256 hashes. To generate hashes, use: `go run ./cmd/crypt username password`
 
 ### Command-line Flags
 
